@@ -205,7 +205,7 @@ async def on_receipt(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     await update.message.reply_text(
-        "📨 رسیدت برای ادمین ارسال شد. به محض تایید، سرویس شما همینجا برات ارسال می‌شه. ممنون از صبرت! 🙏"
+        "📨 رسیدت برای ادمین ارسال شد. به محض تایید، سرویس‌ت همینجا برات ارسال می‌شه. ممنون از صبرت! 🙏"
     )
 
 
@@ -238,7 +238,7 @@ async def on_admin_decision(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode=ParseMode.MARKDOWN,
         )
         await context.bot.send_message(
-            customer_id, "✅ پرداخت شما تایید شد! سرویس‌ شما داره آماده می‌شه، چند لحظه صبر کن..."
+            customer_id, "✅ پرداخت شما تایید شد! سرویس شما داره آماده می‌شه، چند لحظه صبر کن..."
         )
 
     elif action == "reject":
@@ -276,6 +276,16 @@ async def on_admin_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await msg.reply_text("این نوع پیام پشتیبانی نمی‌شه، لطفاً متن یا فایل بفرست.")
         return
+
+    again_kb = InlineKeyboardMarkup(
+        [[InlineKeyboardButton("🛒 خرید / تمدید سرویس جدید", callback_data="back_to_plans")]]
+    )
+    await context.bot.send_message(
+        customer_id,
+        "🙏 ممنون که از *LeGodcy* خرید کردی!\nهر وقت خواستی سرویس جدید بگیری یا تمدید کنی، همینجا بزن 👇",
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=again_kb,
+    )
 
     update_order(order_id, status="fulfilled")
     awaiting_admin_reply.pop(ADMIN_ID, None)
