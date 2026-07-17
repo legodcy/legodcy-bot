@@ -238,7 +238,7 @@ async def on_admin_decision(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode=ParseMode.MARKDOWN,
         )
         await context.bot.send_message(
-            customer_id, "✅ پرداخت شما تایید شد! سرویس‌ت داره آماده می‌شه، چند لحظه صبر کن..."
+            customer_id, "✅ پرداخت شما تایید شد! سرویس‌ شما داره آماده می‌شه، چند لحظه صبر کن..."
         )
 
     elif action == "reject":
