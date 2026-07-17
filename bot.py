@@ -205,7 +205,7 @@ async def on_receipt(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     await update.message.reply_text(
-        "📨 رسیدت برای ادمین ارسال شد. به محض تایید، سرویس‌ت همینجا برات ارسال می‌شه. ممنون از صبرت! 🙏"
+        "📨 رسیدت برای ادمین ارسال شد. به محض تایید، سرویس شما همینجا برات ارسال می‌شه. ممنون از صبرت! 🙏"
     )
 
 
