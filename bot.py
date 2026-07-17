@@ -44,6 +44,7 @@ logger = logging.getLogger("legodcy-bot")
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "PUT-YOUR-TOKEN-HERE")
 ADMIN_ID = int(os.environ.get("ADMIN_ID", "0"))  # آیدی عددی ادمین (نه یوزرنیم)
 ADMIN_CONTACT = "@legodcy"
+CARD_NUMBER = "6219861946601381"
 
 ORDERS_FILE = os.path.join(os.path.dirname(__file__), "orders.json")
 
@@ -135,8 +136,11 @@ async def on_plan_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (
         f"✅ پلن انتخابی: *{plan['title']}*\n"
         f"💰 مبلغ: *{plan['price']:,} تومان*\n\n"
-        f"لطفاً مبلغ رو به کارت اعلامی توسط ادمین ({ADMIN_CONTACT}) واریز کن،\n"
-        f"سپس *عکس یا فایل رسید پرداخت* رو همینجا برای من بفرست تا برای بررسی به ادمین ارسال بشه."
+        f"💳 لطفاً مبلغ را به کارت زیر واریز نمایید:\n"
+        f"`{CARD_NUMBER}`\n"
+        f"👆 با یک کلیک کپی کن\n\n"
+        f"📸 سپس عکس رسید پرداخت را همین‌جا ارسال کنید.\n"
+        f"⚡️ پس از تایید پرداخت، بلافاصله اشتراک براتون ارسال می‌شه."
     )
     await query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN)
 
