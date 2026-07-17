@@ -45,8 +45,10 @@ BOT_TOKEN = os.environ.get("BOT_TOKEN", "PUT-YOUR-TOKEN-HERE")
 ADMIN_ID = int(os.environ.get("ADMIN_ID", "0"))  # آیدی عددی ادمین (نه یوزرنیم)
 ADMIN_CONTACT = "@legodcy"
 CARD_NUMBER = "6219861946601381"
+BOT_USERNAME = os.environ.get("BOT_USERNAME", "Legodcy_Bot")  # یوزرنیم ربات بدون @ (برای ساخت لینک دعوت)
 
 ORDERS_FILE = os.path.join(os.path.dirname(__file__), "orders.json")
+USERS_FILE = os.path.join(os.path.dirname(__file__), "users.json")
 
 # پلن‌ها را همینجا ویرایش کن (قیمت‌ها به تومان)
 PLANS = {
@@ -105,6 +107,67 @@ def update_order(order_id: str, **kwargs) -> dict:
     return orders.get(order_id, {})
 
 
+# ========= کاربران و معرفی به دوستان =========
+def load_users() -> dict:
+    if not os.path.exists(USERS_FILE):
+        return {}
+    with open(USERS_FILE, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def save_users(users: dict) -> None:
+    with open(USERS_FILE, "w", encoding="utf-8") as f:
+        json.dump(users, f, ensure_ascii=False, indent=2)
+
+
+def referral_link(user_id: int) -> str:
+    return f"https://t.me/{BOT_USERNAME}?start=ref_{user_id}"
+
+
+async def register_user(update: Update, context: ContextTypes.DEFAULT_TYPE) -> dict:
+    """کاربر را ثبت می‌کند و اگر از طریق لینک معرفی آمده باشد، رابطه‌ی معرف/زیرمجموعه را ذخیره می‌کند."""
+    user = update.effective_user
+    users = load_users()
+    uid = str(user.id)
+    is_new = uid not in users
+
+    if is_new:
+        users[uid] = {
+            "username": user.username or "",
+            "full_name": user.full_name,
+            "referred_by": None,
+            "referral_count": 0,
+            "joined_at": datetime.utcnow().isoformat(),
+        }
+    else:
+        users[uid]["username"] = user.username or ""
+        users[uid]["full_name"] = user.full_name
+
+    # پردازش لینک معرفی — فقط بار اول که کاربر وارد می‌شود
+    if is_new and context.args:
+        arg = context.args[0]
+        if arg.startswith("ref_"):
+            try:
+                referrer_id = int(arg[4:])
+            except ValueError:
+                referrer_id = None
+            if referrer_id and referrer_id != user.id and str(referrer_id) in users:
+                users[uid]["referred_by"] = referrer_id
+                users[str(referrer_id)]["referral_count"] = users[str(referrer_id)].get("referral_count", 0) + 1
+                save_users(users)
+                try:
+                    await context.bot.send_message(
+                        referrer_id,
+                        f"🎉 یک نفر با لینک معرفی شما وارد ربات شد!\n"
+                        f"👥 تعداد معرفی‌های شما: {users[str(referrer_id)]['referral_count']} نفر",
+                    )
+                except Exception:
+                    logger.warning("Could not notify referrer %s", referrer_id)
+
+    save_users(users)
+    return users[uid]
+
+
 # ========= کیبورد پلن‌ها =========
 def plans_keyboard() -> InlineKeyboardMarkup:
     rows = []
@@ -112,6 +175,7 @@ def plans_keyboard() -> InlineKeyboardMarkup:
         label = f"{plan['title']} — {plan['price']:,} تومان"
         rows.append([InlineKeyboardButton(label, callback_data=f"plan:{key}")])
     rows.append([InlineKeyboardButton("💬 صحبت مستقیم با ادمین", url=f"https://t.me/{ADMIN_CONTACT.lstrip('@')}")])
+    rows.append([InlineKeyboardButton("🎁 معرفی به دوستان", callback_data="referral")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -119,9 +183,32 @@ def plans_keyboard() -> InlineKeyboardMarkup:
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.pop("pending_plan", None)
     context.user_data.pop("pending_order", None)
+    await register_user(update, context)
     await update.message.reply_text(
         WELCOME_TEXT, parse_mode=ParseMode.MARKDOWN, reply_markup=plans_keyboard()
     )
+
+
+async def on_referral(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    user = update.effective_user
+    users = load_users()
+    record = users.get(str(user.id), {"referral_count": 0})
+    link = referral_link(user.id)
+
+    text = (
+        "🎁 *معرفی به دوستان*\n\n"
+        "لینک اختصاصی خودت رو برای دوستات بفرست؛ هر کسی با این لینک وارد ربات بشه،\n"
+        "به نام تو ثبت می‌شه 👇\n\n"
+        f"`{link}`\n"
+        "👆 با یک کلیک کپی کن\n\n"
+        f"👥 تعداد معرفی‌های تو تا الان: *{record.get('referral_count', 0)} نفر*"
+    )
+    back_kb = InlineKeyboardMarkup(
+        [[InlineKeyboardButton("🔙 بازگشت به لیست پلن‌ها", callback_data="back_to_plans")]]
+    )
+    await query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=back_kb)
 
 
 async def on_plan_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -173,11 +260,20 @@ async def on_receipt(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["pending_order"] = order_id
     context.user_data.pop("pending_plan", None)
 
+    users = load_users()
+    referred_by = users.get(str(user.id), {}).get("referred_by")
+    referral_line = ""
+    if referred_by:
+        ref_record = users.get(str(referred_by), {})
+        ref_name = ref_record.get("username") or ref_record.get("full_name") or referred_by
+        referral_line = f"\n🔗 معرفی شده توسط: @{ref_name} (id: {referred_by})"
+
     caption = (
         f"🧾 رسید جدید — سفارش `{order_id}`\n"
         f"👤 کاربر: {user.full_name} (@{user.username or 'ندارد'} | id: {user.id})\n"
         f"📦 پلن: {plan['title']}\n"
         f"💰 مبلغ: {plan['price']:,} تومان"
+        f"{referral_line}"
     )
     admin_kb = InlineKeyboardMarkup(
         [
@@ -238,7 +334,7 @@ async def on_admin_decision(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode=ParseMode.MARKDOWN,
         )
         await context.bot.send_message(
-            customer_id, "✅ پرداخت شما تایید شد! سرویس شما داره آماده می‌شه، چند لحظه صبر کن..."
+            customer_id, "✅ پرداخت شما تایید شد! سرویس‌ت داره آماده می‌شه، چند لحظه صبر کن..."
         )
 
     elif action == "reject":
@@ -318,6 +414,7 @@ def main():
     app.add_handler(CommandHandler("cancel", cancel_admin_wait))
     app.add_handler(CallbackQueryHandler(on_plan_chosen, pattern=r"^plan:"))
     app.add_handler(CallbackQueryHandler(on_back_to_plans, pattern=r"^back_to_plans$"))
+    app.add_handler(CallbackQueryHandler(on_referral, pattern=r"^referral$"))
     app.add_handler(CallbackQueryHandler(on_admin_decision, pattern=r"^(approve|reject):"))
     # پیام‌های ادمین (وقتی منتظر ارسال محتوا هستیم) باید قبل از هندلر رسید مشتری چک بشن
     app.add_handler(MessageHandler(filters.User(user_id=ADMIN_ID) & (filters.TEXT | filters.PHOTO | filters.Document.ALL) & ~filters.COMMAND, on_admin_message))
