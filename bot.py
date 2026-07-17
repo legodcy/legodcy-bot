@@ -141,7 +141,20 @@ async def on_plan_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"📸 سپس عکس رسید پرداخت را همین‌جا ارسال کنید.\n"
         f"⚡️ پس از تایید پرداخت، بلافاصله اشتراک براتون ارسال می‌شه."
     )
-    await query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN)
+    back_kb = InlineKeyboardMarkup(
+        [[InlineKeyboardButton("🔙 بازگشت به لیست پلن‌ها", callback_data="back_to_plans")]]
+    )
+    await query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=back_kb)
+
+
+async def on_back_to_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """کاربر از صفحه‌ی پرداخت به لیست پلن‌ها برمی‌گردد."""
+    query = update.callback_query
+    await query.answer()
+    context.user_data.pop("pending_plan", None)
+    await query.edit_message_text(
+        WELCOME_TEXT, parse_mode=ParseMode.MARKDOWN, reply_markup=plans_keyboard()
+    )
 
 
 async def on_receipt(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -294,6 +307,7 @@ def main():
     app.add_handler(CommandHandler("help", help_cmd))
     app.add_handler(CommandHandler("cancel", cancel_admin_wait))
     app.add_handler(CallbackQueryHandler(on_plan_chosen, pattern=r"^plan:"))
+    app.add_handler(CallbackQueryHandler(on_back_to_plans, pattern=r"^back_to_plans$"))
     app.add_handler(CallbackQueryHandler(on_admin_decision, pattern=r"^(approve|reject):"))
     # پیام‌های ادمین (وقتی منتظر ارسال محتوا هستیم) باید قبل از هندلر رسید مشتری چک بشن
     app.add_handler(MessageHandler(filters.User(user_id=ADMIN_ID) & (filters.TEXT | filters.PHOTO | filters.Document.ALL) & ~filters.COMMAND, on_admin_message))
