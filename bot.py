@@ -60,8 +60,8 @@ PLANS = {
     "v20m": {"title": "📦 حجمی 20G | چندکاربره", "price": 225_000},
 }
 
-# پلن‌های حجمی یک ماه اعتبار دارند (برای نمایش توضیح در پیام خرید)
-VOLUME_PLAN_KEYS = {"v10", "v20", "v10m", "v20m"}
+# پلن‌های نامحدود یک ماه اعتبار دارند (برای نمایش توضیح در پیام خرید)
+UNLIMITED_PLAN_KEYS = {"u1", "u2"}
 # خرید این پلن‌ها در شمارش «معرفی موفق» برای هدیه‌ی یک‌ماهه حساب نمی‌شود
 EXCLUDED_FROM_REFERRAL = {"v10", "v10m"}
 
@@ -231,7 +231,7 @@ async def on_plan_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.pop("renewal_link", None)
     context.user_data.pop("awaiting_renewal_link", None)
 
-    volume_note = "\n⏳ توجه: سرویس‌های حجمی یک ماه اعتبار دارند." if plan_key in VOLUME_PLAN_KEYS else ""
+    volume_note = "\n⏳ توجه: سرویس‌های نامحدود یک ماه اعتبار دارند." if plan_key in UNLIMITED_PLAN_KEYS else ""
 
     text = (
         f"✅ پلن انتخابی: *{plan['title']}*\n"
@@ -269,7 +269,7 @@ async def on_renew_plan_chosen(update: Update, context: ContextTypes.DEFAULT_TYP
     context.user_data["awaiting_renewal_link"] = True
     context.user_data.pop("renewal_link", None)
 
-    volume_note = "\n⏳ توجه: سرویس‌های حجمی یک ماه اعتبار دارند." if plan_key in VOLUME_PLAN_KEYS else ""
+    volume_note = "\n⏳ توجه: سرویس‌های نامحدود یک ماه اعتبار دارند." if plan_key in UNLIMITED_PLAN_KEYS else ""
 
     text = (
         f"🔄 تمدید پلن: *{plan['title']}*\n"
