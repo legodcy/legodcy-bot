@@ -69,9 +69,24 @@ WELCOME_TEXT = (
     "🔥 به *LeGodcy* خوش اومدی 🔥\n\n"
     "اینجا می‌تونی سرویس VPN اختصاصی با آی‌پی آلمان 🇩🇪 و آمریکا 🇺🇸 تهیه کنی.\n"
     "سرعت بالا، پینگ پایین و تحویل فوری بعد از تایید پرداخت 🚀\n"
-    "📱 پیشنهاد: اگه با سیم‌کارت ایرانسل استفاده می‌کنی، اپ *v2rayTun* اتصال پایدارتری می‌ده.\n"
     "🎁 پیش از خرید، ۱۳ دقیقه تست رایگان داری — برای دریافت کافیه گزینه‌ی آخر «صحبت مستقیم با ادمین» رو ضربه بزنی و فقط بنویسی: تست\n\n"
     "👇 یکی از پلن‌ها رو انتخاب کن:"
+)
+
+GUIDE_TEXT = (
+    "📖 *آموزش اتصال*\n\n"
+    "بعد از خرید، یک لینک اشتراک (Subscription) براتون ارسال می‌شه.\n"
+    "برای وصل شدن، دو روش وجود داره:\n\n"
+    "1️⃣ *روش اول*\n"
+    "🌐 وارد لینک بشید (توی مرورگر)، اپ موردنظرتون رو انتخاب کنید؛\n"
+    "✅ سرویس به‌صورت خودکار به اپ اضافه می‌شه.\n\n"
+    "2️⃣ *روش دوم*\n"
+    "📋 لینک (همون Subscription) رو کپی کنید،\n"
+    "📲 داخل اپ‌هایی مثل v2Box برید روی گزینه‌ی:\n"
+    "`Import from clipboard`\n\n"
+    "📱 *پیشنهاد ویژه:* اگه با سیم‌کارت ایرانسل استفاده می‌کنید، اپ *v2rayTun* اتصال پایدارتری می‌ده.\n\n"
+    "⚠️ *توجه:* حتماً در طول هر دو روش، VPN گوشی/سیستم‌تون خاموش باشه.\n\n"
+    f"❓ اگه بازم به کمک نیاز داشتید، به ادمین پیام بدید: {ADMIN_CONTACT}"
 )
 
 # awaiting_admin_reply[admin_id] = order_id  -> پیام بعدی ادمین برای این سفارش فرستاده می‌شود
@@ -174,6 +189,7 @@ def plans_keyboard() -> InlineKeyboardMarkup:
         label = f"{plan['title']} — {plan['price']:,} تومان"
         rows.append([InlineKeyboardButton(label, callback_data=f"plan:{key}")])
     rows.append([InlineKeyboardButton("💬 صحبت مستقیم با ادمین", url=f"https://t.me/{ADMIN_CONTACT.lstrip('@')}")])
+    rows.append([InlineKeyboardButton("📖 آموزش اتصال", callback_data="guide")])
     rows.append([InlineKeyboardButton("🔄 تمدید اشتراک", callback_data="start_renewal")])
     rows.append([InlineKeyboardButton("🎁 معرفی به دوستان", callback_data="referral")])
     return InlineKeyboardMarkup(rows)
@@ -196,6 +212,15 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         WELCOME_TEXT, parse_mode=ParseMode.MARKDOWN, reply_markup=plans_keyboard()
     )
+
+
+async def on_guide(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    back_kb = InlineKeyboardMarkup(
+        [[InlineKeyboardButton("🔙 بازگشت به لیست پلن‌ها", callback_data="back_to_plans")]]
+    )
+    await query.edit_message_text(GUIDE_TEXT, parse_mode=ParseMode.MARKDOWN, reply_markup=back_kb)
 
 
 async def on_referral(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -556,6 +581,7 @@ def main():
     app.add_handler(CallbackQueryHandler(on_plan_chosen, pattern=r"^plan:"))
     app.add_handler(CallbackQueryHandler(on_back_to_plans, pattern=r"^back_to_plans$"))
     app.add_handler(CallbackQueryHandler(on_referral, pattern=r"^referral$"))
+    app.add_handler(CallbackQueryHandler(on_guide, pattern=r"^guide$"))
     app.add_handler(CallbackQueryHandler(on_start_renewal, pattern=r"^start_renewal$"))
     app.add_handler(CallbackQueryHandler(on_renew_plan_chosen, pattern=r"^renew:"))
     app.add_handler(CallbackQueryHandler(on_admin_decision, pattern=r"^(approve|reject):"))
