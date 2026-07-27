@@ -60,8 +60,16 @@ PLANS = {
     "v20m": {"title": "📦 حجمی 20G | چندکاربره", "price": 225_000},
 }
 
+# پلن‌های ویژه‌ی بخش Loyalty — فقط با وارد کردن رمز درست قابل مشاهده‌اند
+LOYALTY_PASSWORD = "1331"
+LOYALTY_PLANS = {
+    "lu1": {"title": "🫂 Loyalty | تک‌کاربره نامحدود (۱ ماهه)", "price": 250_000},
+    "lu2": {"title": "🫂 Loyalty | دو‌کاربره نامحدود (۱ ماهه)", "price": 300_000},
+}
+ALL_PLANS = {**PLANS, **LOYALTY_PLANS}
+
 # پلن‌های نامحدود یک ماه اعتبار دارند (برای نمایش توضیح در پیام خرید)
-UNLIMITED_PLAN_KEYS = {"u1", "u2"}
+UNLIMITED_PLAN_KEYS = {"u1", "u2", "lu1", "lu2"}
 # خرید این پلن‌ها در شمارش «معرفی موفق» برای هدیه‌ی یک‌ماهه حساب نمی‌شود
 EXCLUDED_FROM_REFERRAL = {"v10", "v10m"}
 
@@ -192,6 +200,16 @@ def plans_keyboard() -> InlineKeyboardMarkup:
     rows.append([InlineKeyboardButton("📖 آموزش اتصال", callback_data="guide")])
     rows.append([InlineKeyboardButton("🔄 تمدید اشتراک", callback_data="start_renewal")])
     rows.append([InlineKeyboardButton("🎁 معرفی به دوستان", callback_data="referral")])
+    rows.append([InlineKeyboardButton("🫂Loyalty🫂", callback_data="loyalty_lock")])
+    return InlineKeyboardMarkup(rows)
+
+
+def loyalty_plans_keyboard() -> InlineKeyboardMarkup:
+    rows = []
+    for key, plan in LOYALTY_PLANS.items():
+        label = f"{plan['title']} — {plan['price']:,} تومان"
+        rows.append([InlineKeyboardButton(label, callback_data=f"plan:{key}")])
+    rows.append([InlineKeyboardButton("🔙 بازگشت", callback_data="back_to_plans")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -212,6 +230,21 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         WELCOME_TEXT, parse_mode=ParseMode.MARKDOWN, reply_markup=plans_keyboard()
     )
+
+
+async def on_loyalty_lock(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    context.user_data["awaiting_loyalty_password"] = True
+    text = (
+        "🔒 *بخش ویژه‌ی Loyalty*\n\n"
+        "این بخش فقط با رمز عبور قابل مشاهده‌ست.\n"
+        "رمز رو به‌صورت پیام متنی برام بفرست 🔑"
+    )
+    back_kb = InlineKeyboardMarkup(
+        [[InlineKeyboardButton("🔙 بازگشت به لیست پلن‌ها", callback_data="back_to_plans")]]
+    )
+    await query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=back_kb)
 
 
 async def on_guide(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -250,7 +283,7 @@ async def on_plan_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     plan_key = query.data.split(":", 1)[1]
-    plan = PLANS[plan_key]
+    plan = ALL_PLANS[plan_key]
 
     context.user_data["pending_plan"] = plan_key
     context.user_data.pop("is_renewal", None)
@@ -288,7 +321,7 @@ async def on_renew_plan_chosen(update: Update, context: ContextTypes.DEFAULT_TYP
     query = update.callback_query
     await query.answer()
     plan_key = query.data.split(":", 1)[1]
-    plan = PLANS[plan_key]
+    plan = ALL_PLANS[plan_key]
 
     context.user_data["pending_plan"] = plan_key
     context.user_data["is_renewal"] = True
@@ -318,13 +351,29 @@ async def on_back_to_plans(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.pop("is_renewal", None)
     context.user_data.pop("renewal_link", None)
     context.user_data.pop("awaiting_renewal_link", None)
+    context.user_data.pop("awaiting_loyalty_password", None)
     await query.edit_message_text(
         WELCOME_TEXT, parse_mode=ParseMode.MARKDOWN, reply_markup=plans_keyboard()
     )
 
 
 async def on_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """پیام‌های متنی عادی مشتری‌ها؛ فقط برای گرفتن لینک اشتراک فعلی در فرآیند تمدید استفاده می‌شود."""
+    """پیام‌های متنی عادی مشتری‌ها: رمز بخش Loyalty یا لینک اشتراک فعلی در فرآیند تمدید."""
+    if context.user_data.get("awaiting_loyalty_password"):
+        entered = (update.message.text or "").strip()
+        if entered == LOYALTY_PASSWORD:
+            context.user_data["awaiting_loyalty_password"] = False
+            text = (
+                "✅ رمز درسته! به بخش ویژه‌ی *🫂 Loyalty* خوش اومدی 🫂\n\n"
+                "این پلن‌ها فقط مخصوص همین بخش هستن 👇"
+            )
+            await update.message.reply_text(
+                text, parse_mode=ParseMode.MARKDOWN, reply_markup=loyalty_plans_keyboard()
+            )
+        else:
+            await update.message.reply_text("❌ رمز اشتباهه. دوباره امتحان کن یا برای شروع /start رو بزن.")
+        return
+
     if context.user_data.get("awaiting_renewal_link"):
         link_text = (update.message.text or "").strip()
         context.user_data["renewal_link"] = link_text
@@ -355,7 +404,7 @@ async def on_receipt(update: Update, context: ContextTypes.DEFAULT_TYPE):
     renewal_link = context.user_data.get("renewal_link")
 
     user = update.effective_user
-    plan = PLANS[plan_key]
+    plan = ALL_PLANS[plan_key]
     order_id = create_order(user.id, user.username or user.full_name, plan_key)
     update_order(order_id, status="pending_review", is_renewal=is_renewal, renewal_link=renewal_link)
     context.user_data["pending_order"] = order_id
@@ -582,6 +631,7 @@ def main():
     app.add_handler(CallbackQueryHandler(on_back_to_plans, pattern=r"^back_to_plans$"))
     app.add_handler(CallbackQueryHandler(on_referral, pattern=r"^referral$"))
     app.add_handler(CallbackQueryHandler(on_guide, pattern=r"^guide$"))
+    app.add_handler(CallbackQueryHandler(on_loyalty_lock, pattern=r"^loyalty_lock$"))
     app.add_handler(CallbackQueryHandler(on_start_renewal, pattern=r"^start_renewal$"))
     app.add_handler(CallbackQueryHandler(on_renew_plan_chosen, pattern=r"^renew:"))
     app.add_handler(CallbackQueryHandler(on_admin_decision, pattern=r"^(approve|reject):"))
