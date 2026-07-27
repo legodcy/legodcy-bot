@@ -63,8 +63,8 @@ PLANS = {
 # پلن‌های ویژه‌ی بخش Loyalty — فقط با وارد کردن رمز درست قابل مشاهده‌اند
 LOYALTY_PASSWORD = "1331"
 LOYALTY_PLANS = {
-    "lu1": {"title": "🫂 Loyalty | تک‌کاربره نامحدود (۱ ماهه)", "price": 250_000},
-    "lu2": {"title": "🫂 Loyalty | دو‌کاربره نامحدود (۱ ماهه)", "price": 300_000},
+    "lu1": {"title": "تک‌کاربره نامحدود (۱ ماهه)", "price": 250_000},
+    "lu2": {"title": "دو‌کاربره نامحدود (۱ ماهه)", "price": 300_000},
 }
 ALL_PLANS = {**PLANS, **LOYALTY_PLANS}
 
