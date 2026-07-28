@@ -25,6 +25,7 @@ from datetime import datetime
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.constants import ParseMode
+from telegram.helpers import escape_markdown
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
@@ -400,17 +401,16 @@ async def on_receipt(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
+    if not update.message.photo and not update.message.document:
+        await update.message.reply_text("لطفاً رسید رو به‌صورت عکس یا فایل بفرست.")
+        return
+
     is_renewal = context.user_data.get("is_renewal", False)
     renewal_link = context.user_data.get("renewal_link")
 
     user = update.effective_user
     plan = ALL_PLANS[plan_key]
-    order_id = create_order(user.id, user.username or user.full_name, plan_key)
-    update_order(order_id, status="pending_review", is_renewal=is_renewal, renewal_link=renewal_link)
-    context.user_data["pending_order"] = order_id
-    context.user_data.pop("pending_plan", None)
-    context.user_data.pop("is_renewal", None)
-    context.user_data.pop("renewal_link", None)
+    order_id = uuid.uuid4().hex[:8]
 
     users = load_users()
     referred_by = users.get(str(user.id), {}).get("referred_by")
@@ -418,14 +418,17 @@ async def on_receipt(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if referred_by:
         ref_record = users.get(str(referred_by), {})
         ref_name = ref_record.get("username") or ref_record.get("full_name") or referred_by
-        referral_line = f"\n🔗 معرفی شده توسط: @{ref_name} (id: {referred_by})"
+        referral_line = f"\n🔗 معرفی شده توسط: @{escape_markdown(str(ref_name), version=1)} (id: {referred_by})"
 
     order_type_line = "🔄 نوع سفارش: تمدید اشتراک" if is_renewal else "🆕 نوع سفارش: خرید جدید"
     renewal_link_line = f"\n🔗 لینک فعلی برای تمدید: {renewal_link}" if is_renewal and renewal_link else ""
 
+    safe_full_name = escape_markdown(user.full_name or "", version=1)
+    safe_username = escape_markdown(user.username, version=1) if user.username else "ندارد"
+
     caption = (
         f"🧾 رسید جدید — سفارش `{order_id}`\n"
-        f"👤 کاربر: {user.full_name} (@{user.username or 'ندارد'} | id: {user.id})\n"
+        f"👤 کاربر: {safe_full_name} (@{safe_username} | id: {user.id})\n"
         f"📦 پلن: {plan['title']}\n"
         f"💰 مبلغ: {plan['price']:,} تومان\n"
         f"{order_type_line}"
@@ -441,21 +444,47 @@ async def on_receipt(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]
     )
 
-    if update.message.photo:
-        file_id = update.message.photo[-1].file_id
-        await context.bot.send_photo(
-            ADMIN_ID, file_id, caption=caption, parse_mode=ParseMode.MARKDOWN,
-            reply_markup=admin_kb,
+    # ابتدا سعی می‌کنیم رسید رو برای ادمین بفرستیم؛ فقط اگر موفق شد، سفارش ثبت و پلن انتخابی پاک می‌شه.
+    # این‌طوری اگه ارسال به هر دلیلی (خطای شبکه، کاراکتر خاص و ...) شکست بخوره، مشتری هیچ‌وقت بی‌جواب نمی‌مونه
+    # و پلنش هم گم نمی‌شه.
+    try:
+        if update.message.photo:
+            file_id = update.message.photo[-1].file_id
+            await context.bot.send_photo(
+                ADMIN_ID, file_id, caption=caption, parse_mode=ParseMode.MARKDOWN,
+                reply_markup=admin_kb,
+            )
+        else:
+            file_id = update.message.document.file_id
+            await context.bot.send_document(
+                ADMIN_ID, file_id, caption=caption, parse_mode=ParseMode.MARKDOWN,
+                reply_markup=admin_kb,
+            )
+    except Exception:
+        logger.exception("Failed to forward receipt to admin (order %s)", order_id)
+        await update.message.reply_text(
+            "⚠️ یه مشکل موقت پیش اومد و رسید ارسال نشد.\n"
+            "لطفاً دوباره امتحان کن؛ اگه بازم جواب نگرفتی مستقیم با ادمین در ارتباط باش: "
+            f"{ADMIN_CONTACT}"
         )
-    elif update.message.document:
-        file_id = update.message.document.file_id
-        await context.bot.send_document(
-            ADMIN_ID, file_id, caption=caption, parse_mode=ParseMode.MARKDOWN,
-            reply_markup=admin_kb,
-        )
-    else:
-        await update.message.reply_text("لطفاً رسید رو به‌صورت عکس یا فایل بفرست.")
         return
+
+    orders = load_orders()
+    orders[order_id] = {
+        "user_id": user.id,
+        "username": user.username or user.full_name,
+        "plan": plan_key,
+        "status": "pending_review",
+        "is_renewal": is_renewal,
+        "renewal_link": renewal_link,
+        "created_at": datetime.utcnow().isoformat(),
+    }
+    save_orders(orders)
+
+    context.user_data["pending_order"] = order_id
+    context.user_data.pop("pending_plan", None)
+    context.user_data.pop("is_renewal", None)
+    context.user_data.pop("renewal_link", None)
 
     await update.message.reply_text(
         "📨 رسیدت برای ادمین ارسال شد. به محض تایید، سرویس‌ت همینجا برات ارسال می‌شه. ممنون از صبرت! 🙏"
